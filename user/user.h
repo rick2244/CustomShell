@@ -35,6 +35,9 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int shut(void);
+int reboot(void);
+int utime(void);
 
 // ulib.c
 int stat(const char*, struct stat*);
@@ -44,6 +47,8 @@ char* strchr(const char*, char c);
 int strcmp(const char*, const char*);
 void fprintf(int, const char*, ...);
 void printf(const char*, ...);
+int getline(char**, uint*, int);
+int fgets(char*, int max, int file_type);
 char* gets(char*, int max);
 uint strlen(const char*);
 void* memset(void*, int, uint);

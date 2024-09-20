@@ -89,3 +89,28 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_utime(void)
+{
+	volatile uint64 *test_dev = (uint64 *) UTIME_TEST;
+	uint64 unix_time = *test_dev;
+
+	return unix_time/1000000000ULL;
+}
+
+uint64
+sys_shut(void)
+{
+  volatile uint32 *test_dev = (uint32 *) VIRT_TEST;
+  *test_dev = 0x5555;
+  return 0;	
+}
+
+uint64
+sys_reboot(void)
+{
+  volatile uint32 *test_dev = (uint32 *) VIRT_TEST;
+  *test_dev = 0x7777;
+  return 0;
+}

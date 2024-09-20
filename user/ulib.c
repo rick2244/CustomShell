@@ -63,14 +63,18 @@ strchr(const char *s, char c)
   return 0;
 }
 
-char*
-gets(char *buf, int max)
+/*
+* read the next character from a string and returns 
+* the amount of characters read
+*/
+int
+fgets(char *buf, int size, int fd)
 {
   int i, cc;
   char c;
 
-  for(i=0; i+1 < max; ){
-    cc = read(0, &c, 1);
+  for(i=0; i+1 < size; ){
+    cc = read(fd, &c, 1);
     if(cc < 1)
       break;
     buf[i++] = c;
@@ -78,7 +82,72 @@ gets(char *buf, int max)
       break;
   }
   buf[i] = '\0';
-  return buf;
+  return i;
+}
+
+char*
+gets(char *buf, int max){
+	fgets(buf, max, 0);
+	return buf;
+}
+
+/*
+* reads an entire line from the file discripter, storing the address of the buffer
+* containting the text into *lineptr. The buffer is null-terminated and
+* includes the newline character, if one was found.
+*/
+int getline(char **lineptr, uint *n, int fd){
+	//checks if the pointer to lineptr is not intialized
+	//initiazes it if it isn't initialized  and gives a set buffer size to start out
+	if(*n == 0 || *lineptr == 0){
+		*n = 128;
+		*lineptr = malloc(*n);
+	}
+	
+	//total keeps track of the total amount of characters read so far
+	//and helps with keeping track of what index the char string is at
+	char *buf = *lineptr;
+	int total = 0;
+	
+	while(true){
+		//reads the amount of characters in an individual line
+		int cc = fgets(buf + total, *n - total, fd);
+
+		//returns total if it's at the end of file
+		if(cc == 0){
+			return total;
+		}
+		//return -1 since there was an error when running fgets
+		if(cc == -1){
+			return -1;
+		}
+
+		//no error so the amount of characters is added to the running total
+		//so far
+		total += cc;
+			
+		//checks if there is a new line at the end of file
+		if(buf[total - 1] == '\n' || buf[total - 1] == '\r'){
+			break;
+		}
+		//performs calculation for new buffer size
+		uint new_n = *n * 2;
+		//creates a new string and initializes base sise
+		char *new_buf = malloc(new_n);
+		//copys contents of buf into new_buf
+		memcpy(new_buf, buf, *n);
+		//frees the space used by malloc
+		free(buf);
+		//buff is set to new_buf that has extra space for future traversals
+		buf = new_buf;
+
+		//sets new max size
+		*n = new_n;
+		//assigns lineptr equal to buf
+		*lineptr = buf;
+	}
+
+	return total;
 }
 
 int

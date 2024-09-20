@@ -65,3 +65,9 @@
 //   TRAPFRAME (p->trapframe, used by the trampoline)
 //   TRAMPOLINE (the same page as in the kernel)
 #define TRAPFRAME (TRAMPOLINE - PGSIZE)
+
+//added for test interface for lab3
+#define VIRT_TEST 0x100000
+
+//added to find the unix time 
+#define UTIME_TEST 0x101000
