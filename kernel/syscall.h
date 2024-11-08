@@ -23,3 +23,6 @@
 #define SYS_shut   22
 #define SYS_reboot 23
 #define SYS_utime  24
+#define SYS_strace_on  25
+#define SYS_wait2 26
+#define SYS_getcwd 27

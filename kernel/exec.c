@@ -7,6 +7,7 @@
 #include "defs.h"
 #include "elf.h"
 
+
 static int loadseg(pde_t *, uint64, struct inode *, uint, uint);
 
 int flags2perm(int flags)
@@ -33,11 +34,32 @@ exec(char *path, char **argv)
 
   begin_op();
 
+
   if((ip = namei(path)) == 0){
     end_op();
     return -1;
   }
   ilock(ip);
+
+  //check for shebang at the beginning
+  //shell scripts start with !#/sh
+  char shebang[2];
+  readi(ip, 0, (uint64)&shebang, 0, sizeof(shebang));
+  if(shebang[0] == '#' && shebang[1] == '!'){
+    char interpreter[MAXPATH];
+    int read_sz = readi(ip, 0, (uint64)&interpreter, sizeof(shebang), sizeof(interpreter));
+    for(int i = 0; i < MAXPATH && i < read_sz; i++){
+      if(interpreter[i] == '\n' || interpreter[i] == ' '){
+        interpreter[i] = '\0';
+        break;
+      }
+    }
+
+    char *new_argv[] = {interpreter, argv[0],  0};
+    iunlockput(ip);
+    end_op();
+    return exec(interpreter, new_argv);
+  }
 
   // Check ELF header
   if(readi(ip, 0, (uint64)&elf, 0, sizeof(elf)) != sizeof(elf))

@@ -39,3 +39,6 @@ entry("uptime");
 entry("shut");
 entry("reboot");
 entry("utime");
+entry("strace_on");
+entry("wait2");
+entry("getcwd");

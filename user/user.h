@@ -15,29 +15,34 @@ struct stat;
 
 // system calls
 int fork(void);
-int exit(int) __attribute__((noreturn));
-int wait(int*);
-int pipe(int*);
-int write(int, const void*, int);
-int read(int, void*, int);
-int close(int);
-int kill(int);
-int exec(const char*, char**);
-int open(const char*, int);
-int mknod(const char*, short, short);
-int unlink(const char*);
-int fstat(int fd, struct stat*);
-int link(const char*, const char*);
-int mkdir(const char*);
-int chdir(const char*);
-int dup(int);
+int exit(int return_status) __attribute__((noreturn));
+int wait(int *status);
+int wait2(int *exist_status, int *syscall_cnt);
+int pipe(int *pipefd);
+int write(int fd, const void* buf , int count);
+int read(int fd, void* buf, int count);
+int close(int fd);
+int kill(int pid);
+//question about char**
+int exec(const char* /*str*/ pathname, char** argv);
+
+int open(const char* /*str*/ pathname, int flags);
+int mknod(const char* /*str*/ pathname , short mode, short dev);
+int unlink(const char* /*str*/ pathname);
+int fstat(int fd, struct stat* statbuf);
+int link(const char* /*str*/ oldpath, const char* /*str*/ newpath);
+int mkdir(const char* /*str*/ pathname);
+int chdir(const char* /*str*/ pathname);
+int dup(int oldfd);
 int getpid(void);
-char* sbrk(int);
-int sleep(int);
+char* sbrk(int increment);
+int sleep(int seconds);
 int uptime(void);
 int shut(void);
 int reboot(void);
 int utime(void);
+int strace_on(void);
+int getcwd(char *, int);
 
 // ulib.c
 int stat(const char*, struct stat*);
@@ -48,11 +53,11 @@ int strcmp(const char*, const char*);
 void fprintf(int, const char*, ...);
 void printf(const char*, ...);
 int getline(char**, uint*, int);
-int fgets(char*, int max, int file_type);
-char* gets(char*, int max);
+int fgets(char*, int, int);
+char* gets(char*, int);
 uint strlen(const char*);
 void* memset(void*, int, uint);
-void* malloc(uint);
+void* malloc(uint size);
 void free(void*);
 int atoi(const char*);
 int memcmp(const void *, const void *, uint);

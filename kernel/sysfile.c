@@ -353,8 +353,13 @@ sys_open(void)
     f->type = FD_DEVICE;
     f->major = ip->major;
   } else {
+
     f->type = FD_INODE;
-    f->off = 0;
+    if(omode & O_APPEND){
+      f->off = ip->size;
+    }else{
+      f->off = 0;
+    }
   }
   f->ip = ip;
   f->readable = !(omode & O_WRONLY);
@@ -402,6 +407,34 @@ sys_mknod(void)
     return -1;
   }
   iunlockput(ip);
+  end_op();
+  return 0;
+}
+
+uint64
+sys_getcwd(void)
+{
+  uint64 ubuf;
+  int sz;
+
+  begin_op();
+  argaddr(0, &ubuf);
+  argint(1, &sz);
+
+  if (sz > PGSIZE) {
+    end_op();
+    return -1;
+  }
+
+  char *buf = kalloc();
+  getcwd(buf, sz);
+
+  if (copyout(myproc()->pagetable, ubuf, buf, sz) < 0) {
+    end_op();
+    return -1;
+  }
+
+  kfree(buf);
   end_op();
   return 0;
 }

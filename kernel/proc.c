@@ -163,6 +163,8 @@ freeproc(struct proc *p)
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
+  p->trace = 0;
+  p->syscall_cnt = 0;
   p->parent = 0;
   p->name[0] = 0;
   p->chan = 0;
@@ -388,7 +390,7 @@ exit(int status)
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
 int
-wait(uint64 addr)
+wait2(uint64 addr, uint64 count)
 {
   struct proc *pp;
   int havekids, pid;
@@ -408,12 +410,21 @@ wait(uint64 addr)
         if(pp->state == ZOMBIE){
           // Found one.
           pid = pp->pid;
+
+          if(count != 0 && copyout(p->pagetable, count, (char *)&pp->syscall_cnt,
+                                  sizeof(pp->syscall_cnt)) < 0) {
+            release(&pp->lock);
+            release(&wait_lock);
+            return -1;
+          }
+
           if(addr != 0 && copyout(p->pagetable, addr, (char *)&pp->xstate,
                                   sizeof(pp->xstate)) < 0) {
             release(&pp->lock);
             release(&wait_lock);
             return -1;
           }
+
           freeproc(pp);
           release(&pp->lock);
           release(&wait_lock);
@@ -433,6 +444,18 @@ wait(uint64 addr)
     sleep(p, &wait_lock);  //DOC: wait-sleep
   }
 }
+
+
+// Wait for a child process to exit and return its pid.
+// Return -1 if this process has no children.
+int
+wait(uint64 addr)
+{
+  return wait2(addr, 0);
+}
+
+
+
 
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -515,6 +538,7 @@ yield(void)
   sched();
   release(&p->lock);
 }
+
 
 // A fork child's very first scheduling by scheduler()
 // will swtch to forkret.

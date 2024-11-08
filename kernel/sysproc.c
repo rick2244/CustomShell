@@ -27,12 +27,23 @@ sys_fork(void)
   return fork();
 }
 
+
 uint64
 sys_wait(void)
 {
   uint64 p;
   argaddr(0, &p);
   return wait(p);
+}
+
+uint64
+sys_wait2(void)
+{
+  uint64 p;
+  argaddr(0, &p);
+  uint64 c;
+  argaddr(1, &c);
+  return wait2(p, c);
 }
 
 uint64
@@ -95,8 +106,8 @@ sys_utime(void)
 {
 	volatile uint64 *test_dev = (uint64 *) UTIME_TEST;
 	uint64 unix_time = *test_dev;
-
-	return unix_time/1000000000ULL;
+  //1000000000ULL
+	return unix_time / 1000000LL;
 }
 
 uint64
@@ -112,5 +123,14 @@ sys_reboot(void)
 {
   volatile uint32 *test_dev = (uint32 *) VIRT_TEST;
   *test_dev = 0x7777;
+  return 0;
+}
+
+uint64
+sys_strace_on(void){
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  p->trace = 1;
+  release(&p->lock);
   return 0;
 }
