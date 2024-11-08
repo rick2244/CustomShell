@@ -1,6 +1,8 @@
 K=kernel
 U=user
 
+STRACE_HEADER = $K/strace.h
+
 OBJS = \
   $K/entry.o \
   $K/start.o \
@@ -73,7 +75,7 @@ endif
 
 LDFLAGS = -z max-page-size=4096
 
-$K/kernel: $(OBJS) $K/kernel.ld $U/initcode
+$K/kernel: $(OBJS) $K/kernel.ld $U/initcode $K/strace.h
 	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS) 
 	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
 	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
@@ -97,6 +99,12 @@ _%: %.o $(ULIB)
 $U/usys.S : $U/usys.pl
 	perl $U/usys.pl > $U/usys.S
 
+
+$(STRACE_HEADER):  $U/user.h generate-traces.sh
+	echo "building strace header file"
+	./generate-traces.sh > $(STRACE_HEADER)
+
+
 $U/usys.o : $U/usys.S
 	$(CC) $(CFLAGS) -c -o $U/usys.o $U/usys.S
 
@@ -116,6 +124,14 @@ mkfs/mkfs: mkfs/mkfs.c $K/fs.h $K/param.h
 .PRECIOUS: %.o
 
 UPROGS=\
+	$U/_sleep\
+	$U/_leetify\
+	$U/_fnr\
+	$U/_tolower\
+	$U/_shell\
+	$U/_catlines\
+	$U/_benchmark\
+	$U/_tracer\
 	$U/_arraytests\
 	$U/_shuttest\
 	$U/_unixtimetest\
@@ -140,8 +156,8 @@ UPROGS=\
 	$U/_wc\
 	$U/_zombie\
 
-fs.img: mkfs/mkfs README.md $(UPROGS)
-	mkfs/mkfs fs.img README.md $(UPROGS)
+fs.img: mkfs/mkfs README.md time-machine.txt  input.txt test.sh $(UPROGS) 
+	mkfs/mkfs fs.img README.md time-machine.txt input.txt test.sh $(UPROGS)
 
 -include kernel/*.d user/*.d
 
