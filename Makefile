@@ -132,8 +132,8 @@ UPROGS=\
 	$U/_catlines\
 	$U/_benchmark\
 	$U/_tracer\
-	$U/_arraytests\
-	$U/_shuttest\
+	$U/_exit\
+	$U/_reboot\
 	$U/_unixtimetest\
 	$U/_exitreboottest\
 	$U/_getlinetest\
