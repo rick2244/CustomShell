@@ -10,6 +10,9 @@
 #define STDOUT_FILENO   1
 #define SEEK_END        2
 #define STDERR_FILENO   2
+#define FSM_FIRST_FIT   0
+#define FSM_BEST_FIT    1
+#define FSM_WORST_FIT   2
 
 struct stat;
 
@@ -58,6 +61,9 @@ char* gets(char*, int);
 uint strlen(const char*);
 void* memset(void*, int, uint);
 void* malloc(uint size);
+void malloc_print();
+void malloc_name(void*, const char*);
+void malloc_setfsm(uint);
 void free(void*);
 int atoi(const char*);
 int memcmp(const void *, const void *, uint);

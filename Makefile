@@ -124,6 +124,9 @@ mkfs/mkfs: mkfs/mkfs.c $K/fs.h $K/param.h
 .PRECIOUS: %.o
 
 UPROGS=\
+	$U/_mt90\
+	$U/_mt80\
+	$U/_memtest\
 	$U/_sleep\
 	$U/_leetify\
 	$U/_fnr\

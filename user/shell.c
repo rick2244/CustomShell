@@ -775,8 +775,6 @@ int main(int argc, char *argv[]) {
                 wait(&status);
                 end = utime();
                 myNode->runtime = end - start;
-            }else{
-                myNode->runtime = 0;
             }
 
             if (status != 0) {
