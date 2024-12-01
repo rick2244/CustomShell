@@ -5,8 +5,8 @@
 
 int main(void)
 {
-    malloc_setfsm(FSM_WORST_FIT);
-    char *a = malloc(132); 
+    malloc_setfsm(FSM_FIRST_FIT);
+    char *a = malloc(132);
     char *b = malloc(42);  /* Will be deleted */
     char *c = malloc(132);
     char *d = malloc(132); /* Will be deleted */

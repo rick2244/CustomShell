@@ -54,7 +54,7 @@ merge_test(void)
   }
 }
 
-/*void
+void
 realloc_test(void)
 {
   char *a = malloc(532);    malloc_name(a, "A");
@@ -93,9 +93,9 @@ main(void)
   merge_test();
   printf("\n\n");
 
-  /*printf("---- REALLOC TEST ----\n");
+  printf("---- REALLOC TEST ----\n");
   realloc_test();
-  printf("\n\n");*/
+  printf("\n\n");
 
   return 0;
 }

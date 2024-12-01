@@ -5,7 +5,7 @@
 
 /* If we haven't passed -DDEBUG=1 to gcc, then this will be set to 0: */
 #ifndef DEBUG
-#define DEBUG 1
+#define DEBUG 0
 #endif
 
 #define LOGP(str) \
@@ -82,7 +82,6 @@ void add_memblock(struct mem_block *block){
     block->prev_block = NULL;
     head = block;
     tail = block;
-
   }else{
     tail->next_block = block;
     block->prev_block = tail;
@@ -542,5 +541,14 @@ calloc(uint64 nmemb, uint64 size){
 
 void *
 realloc(void *ptr, uint64 size){
-  return NULL;
+
+  struct mem_block *block = ((struct mem_block *)ptr) - 1;
+
+  if(block == NULL){
+    malloc(NULL);
+  }
+  if(size == 0){
+    free(ptr);
+  }
+  
 }
