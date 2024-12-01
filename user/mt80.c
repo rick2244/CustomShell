@@ -6,6 +6,7 @@
 int main(void)
 {
     malloc_setfsm(FSM_FIRST_FIT);
+    malloc_scribble();
     char *a = malloc(132);
     char *b = malloc(42);  /* Will be deleted */
     char *c = malloc(132);
@@ -38,6 +39,8 @@ int main(void)
     malloc_name(g, "G");
 
     malloc_print();
+    bool leaks =  malloc_leaks();
+    printf("Are there leaks: %s\n", leaks ? "true" : "false");
 
     /**
     * Things to check:

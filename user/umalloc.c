@@ -40,18 +40,25 @@ struct __attribute__((__packed__)) free_block{
 };
 
 
-/*typedef enum {
-    FSM_FIRST_FIT,
-    FSM_BEST_FIT,
-    FSM_WORST_FIT
-} fsm_algo_t;*/
-
 uint current_fsm = FSM_FIRST_FIT;
+bool scribble = false;
 
 void 
 malloc_setfsm(uint algorithm){
   current_fsm = algorithm;
   LOG("FSM algorithm set to: %d\n", current_fsm);
+}
+
+void scribble_memory(void *ptr, uint size){
+  if(scribble && ptr){
+    printf("Memory scribbled\n");
+    memset(ptr, 0xAA, size);
+  }
+}
+
+void malloc_scribble(){
+  scribble = !scribble;
+
 }
 
 void set_used(struct mem_block *block){
@@ -132,55 +139,6 @@ void add_inplace_memblock(struct mem_block *block){
     current = current->next_block;
   }
 }
-
-/*void add_memblock(struct mem_block *block) {
-    // Ensure the block is properly initialized
-    block->next_block = NULL;
-    block->prev_block = NULL;
-
-    if (head == NULL) {
-        head = block;  
-        tail = block;
-    } else {
-        struct mem_block *current = head;
-
-        if ((char *)block < (char *)head) {
-            // Insert at the start
-            block->next_block = head;
-            head->prev_block = block;
-            head = block;
-        } else {
-            // Traverse the list to find the insertion point based on memory address
-            while (current->next_block != NULL && (char *)current->next_block < (char *)block) {
-                current = current->next_block;
-            }
-
-            printf("Current val: %p\n", current);
-            printf("Block val: %p\n", block);
-            printf("Nex val: %p\n", current->next_block);
-
-            // Insert the new block after the current node
-            block->next_block = current->next_block->next_block;
-            block->prev_block = current;
-
-            if (current->next_block != NULL) {
-                // If we're inserting in the middle, update the previous pointer of the next block
-                current->next_block->prev_block = block;
-            }
-
-            // Update the next pointer of the current block
-            current->next_block = block;
-
-            // If the block is inserted at the end, update the tail pointer
-            if (block->next_block == NULL) {
-                tail = block;
-            }
-        }
-    }
-}*/
-
-
-
 
 void remove_memblock(struct mem_block *block){
   
@@ -305,6 +263,35 @@ void malloc_print() {
     printf(" NULL\n");
 }
 
+bool malloc_leaks(){
+  struct mem_block *current = head;
+
+  uint64 leaks = 0;
+  uint64 bytes = 0;
+
+  printf("-- Leak Check --\n");
+  while(current != NULL){
+
+    if(!is_free(current)){
+      leaks++;
+      bytes += current->size;
+
+      printf("[BLOCK %p] %d\t%s\n", current, current->size, current->name);
+    }
+    current = current->next_block;
+  }
+
+  printf("-- Summary --\n");
+  printf("%d blocks lost (%d bytes)\n", leaks, bytes);
+  
+  if(leaks > 0){
+    return true;
+  }
+
+  return false;
+
+}
+
 
 struct mem_block* merge_free(struct mem_block *block){
   //find the first block to the left that isn't free
@@ -418,6 +405,54 @@ split(struct mem_block *block, uint64 size){
   
   // HINT: Use char * to do pointer arithmetic
   uint64 remain = (block->size & ~0x01) - size - sizeof(struct mem_block);
+  //printf("Block size before split: %d, size: %d, sizeofstruct: %d\n", block->size, size, sizeof(struct mem_block));
+  //only negative sbrk if it is a full page of data
+  if(remain >= sizeof(struct mem_block)){
+    // Calculate the memory address for the new block
+        struct mem_block *new_block = (struct mem_block *)((char *)block  + size);
+
+        // Initialize the new block
+        new_block->size = remain + sizeof(struct mem_block);
+        new_block->prev_block = block;  // Link the new block back to the original block
+        new_block->next_block = block->next_block;  // Link the new block to the next block in the memory list
+
+
+        if (block->next_block) {
+            block->next_block->prev_block = new_block;  // Update the next block's previous pointer
+        }
+
+        // Update the original block to reflect the split
+        //block->size = size;
+        block->size = size & ~0x01;
+        block->next_block = new_block;
+
+        set_free(new_block);
+        strncpy(new_block->name, "", sizeof(new_block->name)); // Initial
+
+        if(new_block->next_block == NULL){
+          tail = new_block; //if this new addition is the tail than set it as the new tail
+        }
+        // Add the new block to the free list
+        add_freeblock((struct free_block *)new_block);
+
+        // Debugging information
+        LOG("Split block at %p into:\n", (void *)block);
+        LOG("- Block 1: %p (size: %d)\n", (void *)block, size);
+        LOG("- Block 2: %p (size: %d)\n", (void *)new_block, remain);
+  }
+}
+
+void 
+split_merge(struct mem_block *block, uint64 size){
+  //malloc_print();
+  //Things we need to check to determine if we can split:
+  // - the block is not null
+  // - the block is actually free
+  // - the split size is greattter than our minimum size
+  // - check if the block has enough free space (subtract out whatever the requested new size is and make sure we still have enough)
+  
+  // HINT: Use char * to do pointer arithmetic
+  uint64 remain = (block->size & ~0x01) - size - sizeof(struct mem_block);
   LOG("Block size before split: %d, size: %d, sizeofstruct: %d\n", block->size, size, sizeof(struct mem_block));
   //only negative sbrk if it is a full page of data
   if(remain >= sizeof(struct mem_block)){
@@ -440,12 +475,15 @@ split(struct mem_block *block, uint64 size){
         block->next_block = new_block;
 
         set_free(new_block);
+        strncpy(new_block->name, "", sizeof(new_block->name)); // Initial
 
         if(new_block->next_block == NULL){
           tail = new_block; //if this new addition is the tail than set it as the new tail
         }
         // Add the new block to the free list
         add_freeblock((struct free_block *)new_block);
+
+        merge_free(new_block);
 
         // Debugging information
         LOG("Split block at %p into:\n", (void *)block);
@@ -490,6 +528,7 @@ malloc(uint nbytes)
         split(reuse2, total_sz);
         reuse2->size = total_sz;
       }
+   
       return (struct mem_block *)((char *)reuse2 + sizeof(struct mem_block));
   }
   
@@ -512,9 +551,12 @@ malloc(uint nbytes)
 
   LOG("Allocation successful @ %p, size: %d\n", block, block->size);
 
+
   if (block->size > total_sz + sizeof(struct mem_block)) {
       split(block, total_sz);
   }
+
+  scribble_memory(block + 1, total_sz - sizeof(struct mem_block));
 
   return block + 1;
 }
@@ -542,13 +584,62 @@ calloc(uint64 nmemb, uint64 size){
 void *
 realloc(void *ptr, uint64 size){
 
-  struct mem_block *block = ((struct mem_block *)ptr) - 1;
-
-  if(block == NULL){
-    malloc(NULL);
+  printf("Going to realloc: %d\n", size);
+  
+  if(ptr == NULL){
+    return malloc(size);
   }
+
   if(size == 0){
     free(ptr);
+    return NULL;
   }
+
+  struct mem_block *block = ((struct mem_block *)ptr) - 1;
+
+  uint64 og_size = block->size & ~0x01;
+
+
+  if(og_size >= size + sizeof(struct mem_block)){
+    if(og_size - size >= sizeof(struct mem_block) + 16){
+      printf("Shrinking %s\n", block->name);
+      size = align(size + sizeof(struct mem_block), 16);
+      split_merge(block, size);
+    }
+    return ptr;
+  }
+
+  struct mem_block *merged = merge_free(block);
+
+  size = align(size, 16);
+  if((merged->size & ~0x01) > size + sizeof(struct mem_block)){//not sure if I should include sizeof(struct mem_block)
+
+    set_used(merged);
+    //printf("mergerd size: %d\n", align((merged->size & ~0x01), 16));
+    size += sizeof(struct mem_block);
+    printf("Going to merge: %s, merge size: %d, realloc size: %d \n", merged->name, (merged->size & ~0x01), size);
+
+    if ((merged->size & ~0x01) > size + sizeof(struct mem_block)) {
+        split(merged, size);
+    }
+
+    scribble_memory((char *)merged + og_size, size - og_size);
+    return (struct mem_block *)((char *)merged + sizeof(struct mem_block));
+  }
+
+  void* new_block = malloc(size);
+  printf("Allocating new size: %d\n", size);
+
+  if(new_block == NULL){
+    LOG("Memory Allocation failure!: %p", new_block);
+    return NULL;
+  }
+
+
+  memcpy(new_block, ptr, og_size );
+
+  free(ptr);
+
+  return new_block;
   
 }
