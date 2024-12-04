@@ -73,6 +73,7 @@ realloc_test(void)
   c = realloc(c, 9632);      malloc_name(c, "R2");
 
   // Now that 'c' is free, we can expand 'b' into it 
+  malloc_print();
   b = realloc(b, 632);      malloc_name(b, "R3");
   malloc_print();
 

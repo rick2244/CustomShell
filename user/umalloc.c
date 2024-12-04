@@ -169,11 +169,16 @@ void remove_freeblock(struct free_block *block) {
 
     if (block == f_head) {
         f_head = block->next_free;  
+        return;
     }
 
     if (block == f_tail) {
         f_tail = block->prev_free; 
+        return;
     }
+
+    printf("Block %p:\n", block);
+    printf("Bock 2 %p:\n", block->prev_free->next_free);
 
 
     if (block->prev_free != NULL) {
@@ -302,22 +307,25 @@ struct mem_block* merge_free(struct mem_block *block){
 
   uint size = block->size;
 
-  uint left_cnt = 0;
-  uint right_cnt = 0;
 
   while(left != NULL && is_free(left)){
     size +=  (left->size & ~0x01);
     remove_freeblock((struct free_block*) left);
     block = left;
-    left_cnt++;
     left = left->prev_block;
   }
+
+  printf("Made it here\n");
+
   while(right != NULL && is_free(right)){
     size += (right->size & ~0x01);
     remove_freeblock((struct free_block*) right);
-    right_cnt++;
     right = right->next_block;
   }
+
+  printf("Made it past loops\n");
+
+ 
 
   if(left != NULL){
     left->next_block = block;
@@ -331,11 +339,15 @@ struct mem_block* merge_free(struct mem_block *block){
     tail = block;
   }
 
-  
+ 
 
   block->size = size;
   block->prev_block = left;
   block->next_block = right;
+
+  if(block->next_block == NULL){
+    tail = block;
+  }
 
   set_free(block);
   LOG("Merged block: %p, new size: %d\n", (void *)block, size);
@@ -404,12 +416,14 @@ split(struct mem_block *block, uint64 size){
   // - check if the block has enough free space (subtract out whatever the requested new size is and make sure we still have enough)
   
   // HINT: Use char * to do pointer arithmetic
-  uint64 remain = (block->size & ~0x01) - size - sizeof(struct mem_block);
+  uint64 remain = get_size(block) - size - sizeof(struct mem_block);
   //printf("Block size before split: %d, size: %d, sizeofstruct: %d\n", block->size, size, sizeof(struct mem_block));
   //only negative sbrk if it is a full page of data
-  if(remain >= sizeof(struct mem_block)){
+  if(remain >= sizeof(struct free_block)){
     // Calculate the memory address for the new block
         struct mem_block *new_block = (struct mem_block *)((char *)block  + size);
+        new_block->prev_block = NULL;
+        new_block->next_block = NULL;
 
         // Initialize the new block
         new_block->size = remain + sizeof(struct mem_block);
@@ -423,7 +437,7 @@ split(struct mem_block *block, uint64 size){
 
         // Update the original block to reflect the split
         //block->size = size;
-        block->size = size & ~0x01;
+        block->size = size;
         block->next_block = new_block;
 
         set_free(new_block);
@@ -452,10 +466,10 @@ split_merge(struct mem_block *block, uint64 size){
   // - check if the block has enough free space (subtract out whatever the requested new size is and make sure we still have enough)
   
   // HINT: Use char * to do pointer arithmetic
-  uint64 remain = (block->size & ~0x01) - size - sizeof(struct mem_block);
+  uint64 remain = get_size(block) - size - sizeof(struct mem_block);
   LOG("Block size before split: %d, size: %d, sizeofstruct: %d\n", block->size, size, sizeof(struct mem_block));
   //only negative sbrk if it is a full page of data
-  if(remain >= sizeof(struct mem_block)){
+  if(remain >= sizeof(struct free_block)){
     // Calculate the memory address for the new block
         struct mem_block *new_block = (struct mem_block *)((char *)block  + size);
 
@@ -471,7 +485,7 @@ split_merge(struct mem_block *block, uint64 size){
 
         // Update the original block to reflect the split
         //block->size = size;
-        block->size = size & ~0x01;
+        block->size = size;
         block->next_block = new_block;
 
         set_free(new_block);
@@ -519,17 +533,23 @@ malloc(uint nbytes)
 
   if(reuse2 != NULL){
       LOG("Split is being attempted! %p\n", reuse2);
-      set_used(reuse2);
-      if(reuse2->size > total_sz + sizeof(struct mem_block)){//means that we can split
+    
+      if(reuse2->size > total_sz + sizeof(struct free_block)){//means that we can split
       
         strncpy(reuse2->name, "", sizeof(reuse2->name));
       
         //printf("Size of new block: %d, location: %p\n", reuse2->size, reuse2);
         split(reuse2, total_sz);
-        reuse2->size = total_sz;
       }
-   
-      return (struct mem_block *)((char *)reuse2 + sizeof(struct mem_block));
+
+    
+
+      //want to scribble here
+      //before I return this, check the ranges and make sure that they are accurate
+      printf("The start of the block: %p, the size: %d\n", reuse2, reuse2->size);
+      scribble_memory(reuse2 + 1, total_sz - sizeof(struct mem_block));
+      set_used(reuse2); //consider moving to split
+      return reuse2 + 1;
   }
   
   //every time I sbrk I need to align by 4096
@@ -552,7 +572,7 @@ malloc(uint nbytes)
   LOG("Allocation successful @ %p, size: %d\n", block, block->size);
 
 
-  if (block->size > total_sz + sizeof(struct mem_block)) {
+  if (block->size > total_sz + sizeof(struct free_block)) {
       split(block, total_sz);
   }
 
@@ -597,11 +617,11 @@ realloc(void *ptr, uint64 size){
 
   struct mem_block *block = ((struct mem_block *)ptr) - 1;
 
-  uint64 og_size = block->size & ~0x01;
+  uint64 og_size = get_size(block);
 
 
   if(og_size >= size + sizeof(struct mem_block)){
-    if(og_size - size >= sizeof(struct mem_block) + 16){
+    if(og_size - size >= sizeof(struct free_block) + 16){
       printf("Shrinking %s\n", block->name);
       size = align(size + sizeof(struct mem_block), 16);
       split_merge(block, size);
@@ -611,17 +631,21 @@ realloc(void *ptr, uint64 size){
 
   struct mem_block *merged = merge_free(block);
 
+  printf("made it past merge free\n");
+
   size = align(size, 16);
   if((merged->size & ~0x01) > size + sizeof(struct mem_block)){//not sure if I should include sizeof(struct mem_block)
 
-    set_used(merged);
+   
     //printf("mergerd size: %d\n", align((merged->size & ~0x01), 16));
     size += sizeof(struct mem_block);
     printf("Going to merge: %s, merge size: %d, realloc size: %d \n", merged->name, (merged->size & ~0x01), size);
 
-    if ((merged->size & ~0x01) > size + sizeof(struct mem_block)) {
+    if ((merged->size & ~0x01) > size + sizeof(struct free_block)) {
         split(merged, size);
     }
+    
+    set_used(merged); //consider moving to split
 
     scribble_memory((char *)merged + og_size, size - og_size);
     return (struct mem_block *)((char *)merged + sizeof(struct mem_block));
