@@ -19,16 +19,8 @@
 
 
 struct __attribute__((__packed__)) mem_block {
-    /**
-     * The name of this memory block. If the user doesn't specify a name for the
-     * block, it should be left empty (a single null byte).
-     */
     char name[8];
-
-    /** Size of the block */
     uint64 size;
-
-    /** Links for our doubly-linked list of blocks: */
     struct mem_block *next_block;
     struct mem_block *prev_block;
 };
@@ -43,143 +35,181 @@ struct __attribute__((__packed__)) free_block{
 uint current_fsm = FSM_FIRST_FIT;
 bool scribble = false;
 
-void 
-malloc_setfsm(uint algorithm){
-  current_fsm = algorithm;
-  LOG("FSM algorithm set to: %d\n", current_fsm);
+/**
+ * Sets the memory allocation algorithm used by the system.
+ * 
+ * @param algorithm The algorithm identifier to set as the current memory allocation strategy.
+ */
+void malloc_setfsm(uint algorithm) {
+    current_fsm = algorithm;
 }
 
-void scribble_memory(void *ptr, uint size){
-  if(scribble && ptr){
-    printf("Memory scribbled\n");
-    memset(ptr, 0xAA, size);
-  }
+/**
+ * Scribbles over a memory region with a predefined pattern to aid in debugging.
+ * 
+ * @param ptr A pointer to the memory region to scribble.
+ * @param size The size of the memory region in bytes.
+ */
+void scribble_memory(void *ptr, uint size) {
+    if (scribble && ptr) {
+        memset(ptr, 0xAA, size);
+    }
 }
 
-void malloc_scribble(){
-  scribble = !scribble;
-
+/**
+ * Toggles the scribble mode used for debugging memory.
+ * When enabled, allocated memory is filled with a pattern to detect uninitialized usage.
+ */
+void malloc_scribble() {
+    scribble = !scribble;
 }
 
-void set_used(struct mem_block *block){
-  block->size &= ~0x01;
-};
+/**
+ * Marks a memory block as used.
+ * 
+ * @param block A pointer to the memory block to mark as used.
+ */
+void set_used(struct mem_block *block) {
+    block->size &= ~0x01; // Clear the least significant bit to mark as used.
+}
 
-void set_free(struct mem_block *block){
-  block->size |= 0x01;
+/**
+ * Marks a memory block as free.
+ * 
+ * @param block A pointer to the memory block to mark as free.
+ */
+void set_free(struct mem_block *block) {
+    block->size |= 0x01; // Set the least significant bit to mark as free.
+}
 
-};
+/**
+ * Checks if a memory block is free.
+ * 
+ * @param block A pointer to the memory block to check.
+ * @return True if the block is free; false otherwise.
+ */
+bool is_free(struct mem_block *block) {
+    return block->size & 0x01; // Check the least significant bit.
+}
 
-bool is_free(struct mem_block *block){
-  return block->size & 0x01;
-};
-
-uint64 get_size(struct mem_block *block){
-  return block->size & (~0x01);
-};
+/**
+ * Retrieves the size of a memory block, excluding the metadata.
+ * 
+ * @param block A pointer to the memory block to inspect.
+ * @return The size of the memory block in bytes.
+ */
+uint64 get_size(struct mem_block *block) {
+    return block->size & (~0x01);
+}
 
 struct mem_block *tail = NULL;
 struct mem_block *head = NULL;
 struct free_block *f_tail = NULL;
 struct free_block *f_head = NULL;
 
-void add_memblock(struct mem_block *block){
-  if(head == NULL){
-    block->next_block = NULL;
-    block->prev_block = NULL;
-    head = block;
-    tail = block;
-  }else{
-    tail->next_block = block;
-    block->prev_block = tail;
-    block->next_block = NULL;
-    tail = block;
-  }
+
+/**
+ * Adds a memory block to the doubly linked list of memory blocks.
+ * 
+ * @param block A pointer to the memory block to add.
+ */
+void add_memblock(struct mem_block *block) {
+    if (head == NULL) {
+        block->next_block = NULL;
+        block->prev_block = NULL;
+        head = block;
+        tail = block;
+    } else {
+        tail->next_block = block;
+        block->prev_block = tail;
+        block->next_block = NULL;
+        tail = block;
+    }
 }
 
-void add_freeblock(struct free_block *block){
-
-  block->next_free = NULL;
-  block->prev_free = NULL;
-
-  if(f_head == NULL){
-    block->next_free = NULL;
+/**
+ * Adds a free block to the doubly linked list of free blocks.
+ * 
+ * @param block A pointer to the free block to add.
+ */
+void add_freeblock(struct free_block *block) {
     block->prev_free = NULL;
-    f_head = block;
-    f_tail = block;
 
-  }else{
-    f_tail->next_free = block;
-    block->prev_free = f_tail;
+    if (f_head == NULL) {
+        block->next_free = NULL;
+        block->prev_free = NULL;
+        f_head = block;
+        f_tail = block;
+    } else {
+        f_tail->next_free = block;
+        block->prev_free = f_tail;
+        block->next_free = NULL;
+        f_tail = block;
+    }
     block->next_free = NULL;
-    f_tail = block;
-  }
 }
 
-bool contains_freeblock(struct free_block *block){
-  struct free_block *current = f_head;
-  while(current != NULL){
-    if(current == block){
-      return true;
+/**
+ * Checks if a free block exists in the doubly linked list of free blocks.
+ * 
+ * @param block A pointer to the free block to check.
+ * @return True if the block is found; false otherwise.
+ */
+bool contains_freeblock(struct free_block *block) {
+    struct free_block *current = f_head;
+    while (current != NULL) {
+        if (current == block) {
+            return true;
+        }
+        current = current->next_free;
     }
-    current = current->next_free;
-  }
-  return false;
+    return false;
 }
 
-void add_inplace_memblock(struct mem_block *block){
-  struct mem_block *current = head;
-  while(current != NULL){
-    if(current == block){
-      struct mem_block *next = current->next_block;
-      current->prev_block->next_block = block;
-      block->next_block = next;
-      break;
+/**
+ * Removes a memory block from the doubly linked list of memory blocks.
+ * 
+ * @param block A pointer to the memory block to remove.
+ */
+void remove_memblock(struct mem_block *block) {
+    if (head == NULL) {
+        return;
     }
-    current = current->next_block;
-  }
+
+    if (tail->prev_block == NULL) {
+        head = NULL;
+        tail = NULL;
+        return;
+    }
+
+    if (tail == block) {
+        tail = tail->prev_block;
+        if (tail != NULL) {
+            tail->next_block = NULL;
+        }
+        return;
+    }
 }
 
-void remove_memblock(struct mem_block *block){
-  
-  if(head == NULL){
-    return;
-  }
-
-  if(tail->prev_block == NULL){
-    head = NULL;
-    tail = NULL;
-    return;
-  }
-
-  if(tail == block){
-    tail = tail->prev_block;
-    if(tail != NULL){
-       tail->next_block = NULL;
-    } 
-    return;
-  }
-  
-}
-
+/**
+ * Removes a free block from the doubly linked list of free blocks.
+ * 
+ * @param block A pointer to the free block to remove.
+ */
 void remove_freeblock(struct free_block *block) {
     if (f_head == NULL || block == NULL) {
         return;
     }
 
     if (block == f_head) {
-        f_head = block->next_free;  
+        f_head = block->next_free;
         return;
     }
 
     if (block == f_tail) {
-        f_tail = block->prev_free; 
+        f_tail = block->prev_free;
         return;
     }
-
-    printf("Block %p:\n", block);
-    printf("Bock 2 %p:\n", block->prev_free->next_free);
-
 
     if (block->prev_free != NULL) {
         block->prev_free->next_free = block->next_free;
@@ -188,12 +218,17 @@ void remove_freeblock(struct free_block *block) {
         block->next_free->prev_free = block->prev_free;
     }
 
-  
     block->next_free = NULL;
     block->prev_free = NULL;
 }
 
-
+/**
+ * Searches for and reuses a free memory block based on the specified size and the current
+ * allocation strategy (First Fit, Best Fit, or Worst Fit).
+ *
+ * @param size The size of the memory block to allocate.
+ * @return A pointer to a suitable memory block if available; otherwise, returns NULL.
+ */
 struct mem_block* reuse(uint64 size){
   struct free_block *free = f_head;
   struct free_block *best_fit = NULL;
@@ -231,6 +266,14 @@ struct mem_block* reuse(uint64 size){
   return NULL;
 }
 
+/**
+ * Copies up to a specified number of characters from a source string to a destination string.
+ * Ensures that the destination string is null-terminated.
+ *
+ * @param dest The destination string buffer.
+ * @param src The source string to copy from.
+ * @param size The maximum number of characters to copy (including the null terminator).
+ */
 void 
 strncpy(char *dest, const char *src, uint64 size){
   uint64 i = 0;
@@ -240,20 +283,24 @@ strncpy(char *dest, const char *src, uint64 size){
   dest[i] = '\0';
 }
 
+/**
+ * Prints the current state of the memory allocation system, including:
+ * - All memory blocks, their status (free or used), and names.
+ * - The free list of available memory blocks.
+ */
 void malloc_print() {
     struct mem_block *current = head;
     printf("Current Memory State --\n");
     while (current != NULL) {
         char* status = is_free(current) ? "[FREE]" : "[USED]";
-        void *block_end = (char *)current + (current->size & ~0x01);
+        void *block_end = (char *)current + (get_size(current));
 
-        // Print the memory state with proper address and size formatting
         printf("[BLOCK %p-%p] %d   %s  '%s'\n", 
-          (void *)current,               // Format for the start address
-          (void *)block_end,             // Format for the end address
-          current->size & ~0x01,                 // Format for the size (integer)
-          status,                        // Format for the status (string)
-          current->name);                // Format for the name (string)
+          (void *)current,               
+          (void *)block_end,          
+          get_size(current),             
+          status,                      
+          current->name);           
 
         current = current->next_block;
     }
@@ -268,6 +315,12 @@ void malloc_print() {
     printf(" NULL\n");
 }
 
+/**
+ * Checks for memory leaks in the allocation system by identifying allocated
+ * memory blocks that are not freed.
+ *
+ * @return true if leaks are found (i.e., allocated blocks are not freed); otherwise, false.
+ */
 bool malloc_leaks(){
   struct mem_block *current = head;
 
@@ -297,35 +350,35 @@ bool malloc_leaks(){
 
 }
 
-
+/**
+ * Merges adjacent free memory blocks into a single larger free block.
+ * Updates the free list and memory block links accordingly.
+ *
+ * @param block The memory block to merge with adjacent free blocks.
+ * @return A pointer to the newly merged free block.
+ */
 struct mem_block* merge_free(struct mem_block *block){
-  //find the first block to the left that isn't free
-  //struct mem_block *og = block;
   struct mem_block *left = block->prev_block;
   struct mem_block *right = block->next_block;
 
 
-  uint size = block->size;
+  uint size = get_size(block);
 
 
   while(left != NULL && is_free(left)){
-    size +=  (left->size & ~0x01);
+    size +=  get_size(left);
     remove_freeblock((struct free_block*) left);
     block = left;
     left = left->prev_block;
   }
 
-  printf("Made it here\n");
 
   while(right != NULL && is_free(right)){
-    size += (right->size & ~0x01);
+    size += get_size(right);
     remove_freeblock((struct free_block*) right);
     right = right->next_block;
   }
 
-  printf("Made it past loops\n");
-
- 
 
   if(left != NULL){
     left->next_block = block;
@@ -350,52 +403,53 @@ struct mem_block* merge_free(struct mem_block *block){
   }
 
   set_free(block);
-  LOG("Merged block: %p, new size: %d\n", (void *)block, size);
   return block;
 }
 
-uint64
-align(uint64 og, uint64 align){
-
-  if(og % align == 0){
-    return og;
-  }
-
-  return ((og / align) + 1) * align;
+/**
+ * Aligns a given size to the nearest multiple of the specified alignment.
+ *
+ * @param og The original size to align.
+ * @param align The alignment boundary (e.g., 16, 4096).
+ * @return The size aligned to the nearest multiple of `align`.
+ */
+uint64 align(uint64 og, uint64 align) {
+    if (og % align == 0) {
+        return og;
+    }
+    return ((og / align) + 1) * align;
 }
 
+/**
+ * Frees a previously allocated memory block, merging adjacent free blocks if possible.
+ * Deallocates memory back to the system if the block is the tail and its size is 4096 bytes or larger.
+ *
+ * @param ap A pointer to the memory block to free. Does nothing if the pointer is NULL.
+ */
 void free(void *ap) {
     if (ap == NULL) {
-        LOG("Attempted to free NULL pointer%p\n,", ap);
         return;
     }
 
     struct mem_block *block = ((struct mem_block *)ap) - 1;
 
     if (is_free(block)) {
-        LOG("Double free detected for block %p\n", block);
         return;
     }
-
-    // Merge free blocks
-    //set_free(block); //need to set free
 
     block = merge_free(block);
 
     struct free_block *free_block = (struct free_block *)block;
 
-    // Add to free list if not already present
     if (!contains_freeblock(free_block)) {
         add_freeblock(free_block);
     }
 
-    // Check if we can release memory back to the system
     if (block == tail && (block->size & ~0x01) >= 4096) {
         remove_memblock(block);
         remove_freeblock(free_block);
 
         uint64 total_sz = align(block->size & ~0x01, 4096);
-        LOG("Total size before deallocation: %d\n", block->size & ~0x01);
         char *ret = sbrk(-total_sz);
         if (ret == (char *)-1) {
             LOG("sbrk deallocation failed! %p\n", ret);
@@ -405,265 +459,174 @@ void free(void *ap) {
     }
 }
 
+/**
+ * Splits a memory block into two smaller blocks if the remaining size is large enough
+ * to accommodate a new memory block header and additional memory.
+ *
+ * @param block The memory block to split.
+ * @param size The size of the first block after the split.
+ * @param merge Flag to determine if the newly created block should be merged with adjacent free blocks.
+ */
+void split(struct mem_block *block, uint64 size, uint merge) {
+    uint64 remain = get_size(block) - size - sizeof(struct mem_block);
 
-void 
-split(struct mem_block *block, uint64 size){
-  //malloc_print();
-  //Things we need to check to determine if we can split:
-  // - the block is not null
-  // - the block is actually free
-  // - the split size is greattter than our minimum size
-  // - check if the block has enough free space (subtract out whatever the requested new size is and make sure we still have enough)
-  
-  // HINT: Use char * to do pointer arithmetic
-  uint64 remain = get_size(block) - size - sizeof(struct mem_block);
-  //printf("Block size before split: %d, size: %d, sizeofstruct: %d\n", block->size, size, sizeof(struct mem_block));
-  //only negative sbrk if it is a full page of data
-  if(remain >= sizeof(struct free_block)){
-    // Calculate the memory address for the new block
-        struct mem_block *new_block = (struct mem_block *)((char *)block  + size);
-        new_block->prev_block = NULL;
-        new_block->next_block = NULL;
+    if (remain >= sizeof(struct mem_block) + 16) {
+        struct mem_block *new_block = (struct mem_block *)((char *)block + size);
 
-        // Initialize the new block
         new_block->size = remain + sizeof(struct mem_block);
-        new_block->prev_block = block;  // Link the new block back to the original block
-        new_block->next_block = block->next_block;  // Link the new block to the next block in the memory list
-
+        new_block->prev_block = block;
+        new_block->next_block = block->next_block;
 
         if (block->next_block) {
-            block->next_block->prev_block = new_block;  // Update the next block's previous pointer
+            block->next_block->prev_block = new_block;
         }
 
-        // Update the original block to reflect the split
-        //block->size = size;
         block->size = size;
         block->next_block = new_block;
 
         set_free(new_block);
-        strncpy(new_block->name, "", sizeof(new_block->name)); // Initial
+        strncpy(new_block->name, "", sizeof(new_block->name));
 
-        if(new_block->next_block == NULL){
-          tail = new_block; //if this new addition is the tail than set it as the new tail
+        if (new_block->next_block == NULL) {
+            tail = new_block;
         }
-        // Add the new block to the free list
+
         add_freeblock((struct free_block *)new_block);
-
-        // Debugging information
-        LOG("Split block at %p into:\n", (void *)block);
-        LOG("- Block 1: %p (size: %d)\n", (void *)block, size);
-        LOG("- Block 2: %p (size: %d)\n", (void *)new_block, remain);
-  }
+        if (merge == 1) {
+            merge_free(new_block);
+        }
+    }
 }
 
-void 
-split_merge(struct mem_block *block, uint64 size){
-  //malloc_print();
-  //Things we need to check to determine if we can split:
-  // - the block is not null
-  // - the block is actually free
-  // - the split size is greattter than our minimum size
-  // - check if the block has enough free space (subtract out whatever the requested new size is and make sure we still have enough)
-  
-  // HINT: Use char * to do pointer arithmetic
-  uint64 remain = get_size(block) - size - sizeof(struct mem_block);
-  LOG("Block size before split: %d, size: %d, sizeofstruct: %d\n", block->size, size, sizeof(struct mem_block));
-  //only negative sbrk if it is a full page of data
-  if(remain >= sizeof(struct free_block)){
-    // Calculate the memory address for the new block
-        struct mem_block *new_block = (struct mem_block *)((char *)block  + size);
+/**
+ * Allocates a block of memory of at least the specified size.
+ * If a suitable free block is found, it is reused; otherwise, memory is requested from the system.
+ *
+ * @param nbytes The size of the memory block to allocate.
+ * @return A pointer to the allocated memory block, or NULL if allocation fails.
+ */
+void *malloc(uint nbytes) {
+    uint64 total_sz = nbytes + sizeof(struct mem_block);
+    total_sz = align(total_sz, 16);
 
-        // Initialize the new block
-        new_block->size = remain + sizeof(struct mem_block);
-        new_block->prev_block = block;  // Link the new block back to the original block
-        new_block->next_block = block->next_block;  // Link the new block to the next block in the memory list
+    struct mem_block *reuse2 = reuse(total_sz);
 
-
-        if (block->next_block) {
-            block->next_block->prev_block = new_block;  // Update the next block's previous pointer
+    if (reuse2 != NULL) {
+        if (get_size(reuse2) > total_sz + sizeof(struct mem_block)) {
+            strncpy(reuse2->name, "", sizeof(reuse2->name));
+            split(reuse2, total_sz, 0);
         }
 
-        // Update the original block to reflect the split
-        //block->size = size;
-        block->size = size;
-        block->next_block = new_block;
+        scribble_memory(reuse2 + 1, total_sz - sizeof(struct mem_block));
+        set_used(reuse2);
+        return reuse2 + 1;
+    }
 
-        set_free(new_block);
-        strncpy(new_block->name, "", sizeof(new_block->name)); // Initial
+    uint full_size = align(total_sz, 4096);
+    struct mem_block *block = (struct mem_block *)sbrk(full_size);
 
-        if(new_block->next_block == NULL){
-          tail = new_block; //if this new addition is the tail than set it as the new tail
+    if (block == (void *)-1) {
+        return NULL;
+    }
+
+    block->size = full_size;
+
+    set_used(block);
+    add_memblock(block);
+
+    if (block->size > total_sz + sizeof(struct free_block)) {
+        split(block, total_sz, 0);
+    }
+
+    scribble_memory(block + 1, total_sz - sizeof(struct mem_block));
+    return block + 1;
+}
+
+/**
+ * Assigns a name to a memory block for identification during debugging or leak checks.
+ *
+ * @param ap A pointer to the allocated memory block.
+ * @param name The name to assign to the memory block.
+ */
+void malloc_name(void *ap, const char *name) {
+    struct mem_block *block = ((struct mem_block *)ap) - 1;
+    strncpy(block->name, name, sizeof(block->name));
+    LOG("Assigned name: %s for block %p\n", block->name, ap);
+}
+
+/**
+ * Allocates a block of memory and initializes all its bytes to zero.
+ *
+ * @param nmemb The number of elements to allocate.
+ * @param size The size of each element.
+ * @return A pointer to the allocated and zeroed memory block, or NULL if allocation fails.
+ */
+void *calloc(uint64 nmemb, uint64 size) {
+    void *memory = malloc(nmemb * size);
+    if (memory == NULL) {
+        return NULL;
+    }
+
+    memset(memory, 0, nmemb * size);
+    return memory;
+}
+
+/**
+ * Reallocates a memory block to a new size. If the block cannot be resized in place,
+ * a new block is allocated, and the existing data is copied to the new block.
+ *
+ * @param ptr A pointer to the previously allocated memory block.
+ *            If NULL, this function behaves like `malloc`.
+ * @param size The new size for the memory block.
+ *             If 0, the memory block is freed, and NULL is returned.
+ * @return A pointer to the resized memory block, or NULL if allocation fails.
+ */
+void *realloc(void *ptr, uint64 size) {
+    if (ptr == NULL) {
+        return malloc(size);
+    }
+
+    if (size == 0) {
+        free(ptr); 
+        return NULL;
+    }
+
+    struct mem_block *block = ((struct mem_block *)ptr) - 1;
+    uint64 og_size = get_size(block);
+
+    if (og_size >= size + sizeof(struct mem_block)) {
+        if (og_size - size >= sizeof(struct free_block) + 16) {
+            size = align(size + sizeof(struct mem_block), 16);
+            split(block, size, 1);
         }
-        // Add the new block to the free list
-        add_freeblock((struct free_block *)new_block);
-
-        merge_free(new_block);
-
-        // Debugging information
-        LOG("Split block at %p into:\n", (void *)block);
-        LOG("- Block 1: %p (size: %d)\n", (void *)block, size);
-        LOG("- Block 2: %p (size: %d)\n", (void *)new_block, remain);
-  }
-}
-
-void *
-malloc(uint nbytes)
-{
-  //make sure to aligh allocations to 16 bytes!
-  uint64 total_sz = nbytes + sizeof(struct mem_block);
-  LOG("Allocation request: %d; total size %d\n", nbytes, total_sz);
-
-  //one char = 1 byte, so sbrk returna char *
-  //todo, try to reuse an existing allocator (blocks set to free)
-  //ex: reuse(size) -> a block, or NULL if we couldn't find one to reuse
-  //FSM algorithms
-  //if we can reuse, we SPLIT IT FIRST (if possible), we return it and stop here!
-
-  //If we couldn't reuse a block, proceed
-  //If we need to sbrk more data, we do it on multiples of the page size (4096)
-  //this means that we will have to *split* blocks
-  //Splitting:
-  // -use the first part of the sbrk'd data for the block that the user asked for
-  // -use the remainder of the free block that can be reused later
-
- 
-  total_sz = align(total_sz, 16);
-
-  struct mem_block *reuse2 = reuse(total_sz);
-
-  if(reuse2 != NULL){
-      LOG("Split is being attempted! %p\n", reuse2);
-    
-      if(reuse2->size > total_sz + sizeof(struct free_block)){//means that we can split
-      
-        strncpy(reuse2->name, "", sizeof(reuse2->name));
-      
-        //printf("Size of new block: %d, location: %p\n", reuse2->size, reuse2);
-        split(reuse2, total_sz);
-      }
-
-    
-
-      //want to scribble here
-      //before I return this, check the ranges and make sure that they are accurate
-      printf("The start of the block: %p, the size: %d\n", reuse2, reuse2->size);
-      scribble_memory(reuse2 + 1, total_sz - sizeof(struct mem_block));
-      set_used(reuse2); //consider moving to split
-      return reuse2 + 1;
-  }
-  
-  //every time I sbrk I need to align by 4096
-  uint full_size = align(total_sz, 4096);
-
-  struct mem_block *block = (struct mem_block *) sbrk(full_size);
-
-  if(block == (void *) - 1){
-    LOG("Memory allocation failure!: %p\n", block);
-    return NULL;
-  }
-
-
-  //this should be a function! (and other linked list related stuff)
-  block->size = full_size;
-
-  set_used(block);
-  add_memblock(block);
-
-  LOG("Allocation successful @ %p, size: %d\n", block, block->size);
-
-
-  if (block->size > total_sz + sizeof(struct free_block)) {
-      split(block, total_sz);
-  }
-
-  scribble_memory(block + 1, total_sz - sizeof(struct mem_block));
-
-  return block + 1;
-}
-
-void 
-malloc_name(void *ap, const char *name){
-  struct mem_block *block = ((struct mem_block *) ap) - 1;
-  strncpy(block->name, name, sizeof(block->name));
-
-  LOG("Assigned name: %s for block %p\n", block->name, ap);
-}
-
-void *
-calloc(uint64 nmemb, uint64 size){
-  //malloc but zeroed out 
-  void *memory = malloc(nmemb * size);
-  if(memory == NULL){
-    return NULL;
-  }
-
-  memset(memory, 0, nmemb * size);
-  return memory;
-}
-
-void *
-realloc(void *ptr, uint64 size){
-
-  printf("Going to realloc: %d\n", size);
-  
-  if(ptr == NULL){
-    return malloc(size);
-  }
-
-  if(size == 0){
-    free(ptr);
-    return NULL;
-  }
-
-  struct mem_block *block = ((struct mem_block *)ptr) - 1;
-
-  uint64 og_size = get_size(block);
-
-
-  if(og_size >= size + sizeof(struct mem_block)){
-    if(og_size - size >= sizeof(struct free_block) + 16){
-      printf("Shrinking %s\n", block->name);
-      size = align(size + sizeof(struct mem_block), 16);
-      split_merge(block, size);
+        return ptr;
     }
-    return ptr;
-  }
 
-  struct mem_block *merged = merge_free(block);
+    struct mem_block *merged = merge_free(block);
 
-  printf("made it past merge free\n");
+    size = align(size, 16);
+    if ((merged->size & ~0x01) > size + sizeof(struct mem_block)) {
+        size += sizeof(struct mem_block);
 
-  size = align(size, 16);
-  if((merged->size & ~0x01) > size + sizeof(struct mem_block)){//not sure if I should include sizeof(struct mem_block)
+        if ((merged->size & ~0x01) > size + sizeof(struct free_block)) {
+            split(merged, size, 0);
+        }
 
-   
-    //printf("mergerd size: %d\n", align((merged->size & ~0x01), 16));
-    size += sizeof(struct mem_block);
-    printf("Going to merge: %s, merge size: %d, realloc size: %d \n", merged->name, (merged->size & ~0x01), size);
-
-    if ((merged->size & ~0x01) > size + sizeof(struct free_block)) {
-        split(merged, size);
+        set_used(merged);
+        scribble_memory(merged + 1, size - og_size);
+        return merged + 1;
     }
-    
-    set_used(merged); //consider moving to split
 
-    scribble_memory((char *)merged + og_size, size - og_size);
-    return (struct mem_block *)((char *)merged + sizeof(struct mem_block));
-  }
+    add_freeblock((struct free_block *)merged);
+    void *new_block = malloc(size);
 
-  void* new_block = malloc(size);
-  printf("Allocating new size: %d\n", size);
+    if (new_block == NULL) {
+        LOG("Memory Allocation failure!: %p", new_block);
+        return NULL;
+    }
 
-  if(new_block == NULL){
-    LOG("Memory Allocation failure!: %p", new_block);
-    return NULL;
-  }
-
-
-  memcpy(new_block, ptr, og_size );
-
-  free(ptr);
-
-  return new_block;
-  
+    memcpy(new_block, ptr, og_size); 
+    free(ptr); 
+    return new_block;
 }
+

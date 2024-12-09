@@ -275,13 +275,12 @@ int isDigit(char c) {
  */
 void freeList(struct LinkedList *list) {
     struct Node *current = list->head;
+    struct Node *next_node;
     while (current != NULL) {
-        struct Node *temp = current;
-        current = current->next;
-        free((void *)temp->command);
-        free(temp);
+        next_node = current->next;
+        free(current);  
+        current = next_node;    
     }
-    free(list);
 }
 
 /**
@@ -304,6 +303,8 @@ struct builtin {
  * @return 1 to signal an exit.
  */
 int builtin_exit(char *cmd, char *arg, struct LinkedList *list) {
+    malloc_print();
+    malloc_leaks();
     printf("Aight, I'm gonna head out\n");
     return 1;
 }
@@ -418,6 +419,19 @@ struct command {
     char *stdout_file;
     char *stdin_file;
 };
+
+void free_command(struct command *cmd) {
+    // Free each token in the tokens array
+    if (cmd->tokens) {
+        for (int i = 0; cmd->tokens[i] != NULL; i++) {
+            free(cmd->tokens[i]);  // Free each string in the tokens array
+        }
+        free(cmd->tokens);  // Free the tokens array itself
+    }
+    // Free other dynamically allocated members
+    free(cmd->stdout_file);
+    free(cmd->stdin_file);
+}
 
 /**
  * Checks if a path contains a '/' character.
@@ -659,6 +673,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (strcmp(cmd, "\n") == 0 || cmd[0] == '#') {
+            free(cmd);
             continue;
         }
 
@@ -668,6 +683,7 @@ int main(int argc, char *argv[]) {
         if (cmd[0] == '!') {
             cmd = builtin_bang(cmd, list);
         }
+        
         command_num++;
 
         char *tokens[128];
@@ -752,6 +768,10 @@ int main(int argc, char *argv[]) {
             }
 
             insertAtFront(list, myNode);
+            free(cmds);  // Then free the cmds array
+            cmds = NULL;
+            free(cmd);
+            free(myNode);
             continue;
         }
 
@@ -783,12 +803,13 @@ int main(int argc, char *argv[]) {
             
             insertAtFront(list, myNode);
         }
-        free(cmds);
+        free(cmds);  // Then free the cmds array
+        cmds = NULL;
         free(cmd);
+        free(myNode);
     }
     close(fd);
     freeList(list);
-
+    free(list);
     return 0;
 }
-
