@@ -1,4 +1,5 @@
 Author: Richard Dzreke
+Please look at Raw for accurately formatted examples.
 
 Custom Shell
 
